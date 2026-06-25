@@ -1,0 +1,65 @@
+networks:
+  decoy-network:
+    driver: bridge
+
+services:
+  decoy-db:
+    build:
+      context: ./decoy-db
+    container_name: decoy-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    networks:
+      - decoy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  decoy-otel:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: decoy-otel
+    volumes:
+      - ./decoy-otel/otel-config.yaml:/etc/otelcol/config.yaml
+    networks:
+      - decoy-network
+
+  decoy-datalayer:
+    build:
+      context: ./decoy-datalayer
+    container_name: decoy-datalayer
+    environment:
+      - DB_URL=jdbc:postgresql://decoy-db:5432/${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://decoy-otel:4317
+    depends_on:
+      decoy-db:
+        condition: service_healthy
+    networks:
+      - decoy-network
+
+  decoy-orch:
+    build:
+      context: ./decoy-orch
+    container_name: decoy-orch
+    environment:
+      - PORT=3001
+      - DB_URL=postgresql://${DB_USER}:${DB_PASSWORD}@decoy-db:5432/${DB_NAME}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://decoy-otel:4318
+    depends_on:
+      decoy-db:
+        condition: service_healthy
+    networks:
+      - decoy-network
+
+  decoy-ui:
+    build:
+      context: ./decoy-ui
+    container_name: decoy-ui
+    networks:
+      - decoy-network

@@ -1,0 +1,23 @@
+services:
+  # Database ports are unmapped from the host network completely!
+  # Data volumes use robust infrastructure points or managed cloud mount block storage.
+  decoy-db:
+    restart: always
+    volumes:
+      - /var/lib/decoy/prod-db-data:/var/lib/postgresql/data
+
+  decoy-datalayer:
+    restart: always
+
+  decoy-orch:
+    restart: always
+    ports:
+      - "127.0.0.1:3001:3001" # Only allows traffic routed via an internal reverse proxy
+
+  decoy-ui:
+    restart: always
+    ports:
+      - "80:3000" # Maps the standard web HTTP port directly to the UI layer
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_ORCH_API_URL=https://api.decoy-alliance.net # Your actual production domain

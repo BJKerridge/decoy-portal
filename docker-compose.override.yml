@@ -1,0 +1,73 @@
+services:
+  # Expose database port locally for tools like DBeaver
+  decoy-db:
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./decoy-db/data:/var/lib/postgresql/data
+      - ./decoy-db/backups:/backups
+
+  decoy-otel:
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  # Keep local telemetry services running
+  decoy-loki:
+    image: grafana/loki:2.9.4
+    container_name: decoy-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - decoy-network
+
+  decoy-promtail:
+    image: grafana/promtail:main
+    container_name: decoy-promtail
+    environment:
+      - DOCKER_API_VERSION=1.44
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - decoy-network
+
+  decoy-monitoring:
+    image: grafana/grafana-oss:latest
+    container_name: decoy-monitoring
+    ports:
+      - "4000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./decoy-monitoring/provisioning:/etc/grafana/provisioning
+    networks:
+      - decoy-network
+
+  # Inject Adminer strictly for local triage
+  decoy-adminer:
+    image: adminer:latest
+    container_name: decoy-adminer
+    ports:
+      - "5050:8080"
+    networks:
+      - decoy-network
+    depends_on:
+      decoy-db:
+        condition: service_healthy
+
+  decoy-orch:
+    ports:
+      - "3001:3001"
+
+  decoy-ui:
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_ORCH_API_URL=http://localhost:3001
